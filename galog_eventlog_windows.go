@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/go/x/sys/windows/svc/eventlog"
+	"golang.org/x/sys/windows/svc/eventlog"
 )
 
 // NewEventlogBackend returns a new EventlogBackend implementation.
