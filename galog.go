@@ -169,8 +169,6 @@ const (
 	fallbackFormat = `{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} [{{.Level}}]: {{.Message}}`
 )
 
-// newLogger allocates and configures a new logger based on default behavior
-// descriptors.
 func newLogger(exitFunc func()) *logger {
 	return &logger{
 		currentLevel:   WarningLevel,
