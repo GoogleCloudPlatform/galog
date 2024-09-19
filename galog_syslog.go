@@ -41,6 +41,8 @@ type syslogMetrics struct {
 	success int64
 	// errors is the number of failed log entry writes.
 	errors int64
+	// errorMsgs is the list of error messages.
+	errorMsgs []string
 }
 
 // SyslogBackend is an implementation for logging to the linux syslog.

@@ -18,11 +18,17 @@ package galog
 
 import (
 	"context"
+	"log/syslog"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestSyslog(t *testing.T) {
+	if _, err := syslog.New(syslog.LOG_DAEMON|syslog.LOG_INFO, "test"); err != nil {
+		t.Skipf("syslog not found, skipping test: %v", err)
+	}
+
 	tl := newTestLogger()
 	tl.SetQueueRetryFrequency(time.Millisecond)
 	tl.SetLevel(DebugLevel)
@@ -68,10 +74,11 @@ func TestSyslog(t *testing.T) {
 					break
 				}
 
-				if be.metrics.errors != 0 {
-					t.Errorf("got errors %d, want 0", be.metrics.errors)
-				}
 				time.Sleep(time.Millisecond)
+			}
+
+			if be.metrics.errors != 0 {
+				t.Errorf("got errors %d, want 0. Errors: \n%s\n", be.metrics.errors, strings.Join(be.metrics.errorMsgs, "\n"))
 			}
 
 			if !success {

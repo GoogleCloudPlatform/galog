@@ -44,8 +44,9 @@ func TestSerialValidPort(t *testing.T) {
 		t.Fatalf("serial.GetPortsList() failed: %v", err)
 	}
 
+	// If no serial ports are found, skip the test.
 	if len(ports) == 0 {
-		t.Fatalf("serial.GetPortsList() returned no ports")
+		t.Skipf("serial.GetPortsList() returned no ports")
 	}
 
 	tl := newTestLogger()

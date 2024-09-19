@@ -37,26 +37,27 @@ func NewSyslogBackend(ident string) *SyslogBackend {
 }
 
 // recordMetric records number of success or failures of syslog writes.
-func (sb *SyslogBackend) recordMetric(success bool) {
+func (sb *SyslogBackend) recordMetric(err error) {
 	if sb.metrics == nil {
 		return
 	}
 	sb.metrics.mu.Lock()
 	defer sb.metrics.mu.Unlock()
-	if success {
+	if err == nil {
 		sb.metrics.success++
 	} else {
 		sb.metrics.errors++
+		sb.metrics.errorMsgs = append(sb.metrics.errorMsgs, err.Error())
 	}
 }
 
 // Log prints the log entry to syslog.
 func (sb *SyslogBackend) Log(entry *LogEntry) error {
 	if err := sb.writeEntry(entry); err != nil {
-		sb.recordMetric(false)
+		sb.recordMetric(err)
 		return err
 	}
-	sb.recordMetric(true)
+	sb.recordMetric(nil)
 	return nil
 }
 
