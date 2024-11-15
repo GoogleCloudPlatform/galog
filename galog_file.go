@@ -49,9 +49,9 @@ func NewFileBackend(logFilePath string) *FileBackend {
 	}
 
 	res.config.SetFormat(ErrorLevel,
-		`{{if .Prefix}}{{.Prefix}}: {{end}}{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} [{{.Level}}]: {{.Message}}`)
+		`{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} {{if .Prefix}} {{.Prefix}}: {{end}}[{{.Level}}]: {{.Message}}`)
 	res.config.SetFormat(DebugLevel,
-		`{{if .Prefix}}{{.Prefix}}: {{end}}{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} [{{.Level}}]: ({{.File}}:{{.Line}}) {{.Message}}`)
+		`{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} {{if .Prefix}} {{.Prefix}}: {{end}}[{{.Level}}]: ({{.File}}:{{.Line}}) {{.Message}}`)
 
 	return res
 }
