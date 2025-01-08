@@ -15,6 +15,7 @@
 package galog
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
@@ -94,6 +95,6 @@ func (fb *FileBackend) Config() Config {
 
 // Flush is a no-op implementation for file backend as we are opening the file
 // for every log operation.
-func (fb *FileBackend) Flush() error {
+func (fb *FileBackend) Flush(context.Context) error {
 	return nil
 }

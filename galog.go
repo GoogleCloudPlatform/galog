@@ -65,7 +65,7 @@ type Backend interface {
 	// Config returns the backend configuration interface implementation.
 	Config() Config
 	// Flush flushes the backend's backing log storage.
-	Flush() error
+	Flush(ctx context.Context) error
 }
 
 // LogEntry describes a log record.
@@ -133,6 +133,14 @@ type logger struct {
 	exitFunc func()
 }
 
+// ShutdownConfig defines timeouts for the queue and backends.
+type ShutdownConfig struct {
+	// QueueTimeout is the timeout for the log queue.
+	QueueTimeout time.Duration
+	// BackendTimeout is the timeout for the backends.
+	BackendTimeout time.Duration
+}
+
 // Verbose is the verbosity controlled log operations.
 type Verbose bool
 
@@ -167,6 +175,12 @@ const (
 	// fallbackFormat is used when a backend didn't provide the level <-> format
 	// mapping.
 	fallbackFormat = `{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} [{{.Level}}]: {{.Message}}`
+
+	// defaultQueueTimeout is the default timeout for the log queue.
+	defaultQueueTimeout = time.Second
+
+	// defaultBackendTimeout is the default timeout for the backends.
+	defaultBackendTimeout = time.Millisecond * 250
 )
 
 // newLogger allocates and configures a new logger based on default behavior
@@ -248,8 +262,16 @@ func UnregisterBackend(backend Backend) {
 }
 
 // Shutdown shuts down the default logger.
-func Shutdown(timeout time.Duration) {
-	defaultLogger.Shutdown(timeout)
+func Shutdown() {
+	defaultLogger.ShutdownWithConfig(ShutdownConfig{
+		QueueTimeout:   defaultQueueTimeout,
+		BackendTimeout: defaultBackendTimeout,
+	})
+}
+
+// ShutdownWithConfig shuts down the default logger with the provided config.
+func ShutdownWithConfig(config ShutdownConfig) {
+	defaultLogger.ShutdownWithConfig(config)
 }
 
 // SetPrefix sets the prefix to be used for the log message. When present the
@@ -568,16 +590,16 @@ func (lg *logger) UnregisterBackend(backend Backend) {
 	}
 }
 
-// Shutdown shuts down the logger. It unregisters all previously registered
-// backends. Tries to flush out any pending enqueued entries for a period
-// provided by the caller with timeout parameter.
+// ShutdownWithConfig shuts down the logger. It unregisters all previously
+// registered backends. Tries to flush out any pending enqueued entries for a
+// period provided by the caller with timeout parameter.
 //
 // Any pending write in the backing storage of a backend will be flushed - the
 // backend implementation's Flush() operation will be called.
 //
-// After calling Shutdown() all logging calls (i.e. Errorf(), Infof()) will be
-// no-op (as no backends will left registered after that).
-func (lg *logger) Shutdown(timeout time.Duration) {
+// After calling ShutdownWithConfig() all logging calls (i.e. Errorf(), Infof())
+// will be no-op (as no backends will left registered after that).
+func (lg *logger) ShutdownWithConfig(config ShutdownConfig) {
 	var backends []*BackendQueue
 
 	lg.queuesMutex.Lock()
@@ -591,7 +613,7 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 		lg.UnregisterBackend(queue.backend)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), config.QueueTimeout)
 	defer cancel()
 
 	// Flush any pending writes.
@@ -600,7 +622,10 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 			break
 		}
 		lg.flushEnqueuedEntries(ctx, queue)
-		queue.backend.Flush()
+
+		timeoutContext, cancelFunc := context.WithTimeout(ctx, config.BackendTimeout)
+		queue.backend.Flush(timeoutContext)
+		cancelFunc()
 	}
 }
 
@@ -821,7 +846,7 @@ func (lg *logger) Errorf(format string, args ...any) {
 // (see [SetQueueRetryFrequency]).
 func (lg *logger) Fatal(args ...any) {
 	lg.log(newEntry(FatalLevel, lg.prefix, fmt.Sprint(args...)))
-	lg.Shutdown(lg.retryFrequency)
+	lg.ShutdownWithConfig(ShutdownConfig{lg.retryFrequency, defaultBackendTimeout})
 	lg.exitFunc()
 }
 
@@ -835,7 +860,7 @@ func (lg *logger) Fatal(args ...any) {
 // (see [SetQueueRetryFrequency]).
 func (lg *logger) Fatalf(format string, args ...any) {
 	lg.log(newEntry(FatalLevel, lg.prefix, fmt.Sprintf(format, args...)))
-	lg.Shutdown(lg.retryFrequency)
+	lg.ShutdownWithConfig(ShutdownConfig{lg.retryFrequency, defaultBackendTimeout})
 	lg.exitFunc()
 }
 

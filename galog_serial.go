@@ -100,7 +100,7 @@ func (sb *SerialBackend) ID() string {
 
 // Flush is a no-op implementation for serial backend as we are opening the file
 // for every log operation.
-func (sb *SerialBackend) Flush() error {
+func (sb *SerialBackend) Flush(context.Context) error {
 	return nil
 }
 

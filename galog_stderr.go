@@ -15,6 +15,7 @@
 package galog
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -88,7 +89,7 @@ func (wb *StderrBackend) Config() Config {
 }
 
 // Flush flushes the stderr file.
-func (wb *StderrBackend) Flush() error {
+func (wb *StderrBackend) Flush(context.Context) error {
 	if err := os.Stderr.Sync(); err != nil {
 		return fmt.Errorf("failed to flush stderr: %+v", err)
 	}

@@ -71,7 +71,7 @@ func (bl *bypassBackend) Config() Config {
 	return bl.config
 }
 
-func (bl *bypassBackend) Flush() error {
+func (bl *bypassBackend) Flush(context.Context) error {
 	return nil
 }
 
@@ -93,7 +93,10 @@ func TestRegisteredBackendIDs(t *testing.T) {
 	defaultLogger = tl
 
 	t.Cleanup(func() {
-		Shutdown(time.Millisecond)
+		ShutdownWithConfig(ShutdownConfig{
+			QueueTimeout:   time.Millisecond,
+			BackendTimeout: time.Millisecond,
+		})
 		defaultLogger = globalLogger
 	})
 
@@ -316,7 +319,7 @@ func (eb *enqueuedBackend) Config() Config {
 	return eb.config
 }
 
-func (eb *enqueuedBackend) Flush() error {
+func (eb *enqueuedBackend) Flush(context.Context) error {
 	return nil
 }
 
@@ -577,13 +580,19 @@ func TestLevelString(t *testing.T) {
 }
 
 type flushBackend struct {
-	shouldFail bool
-	flushed    bool
-	config     Config
+	shouldFail    bool
+	shouldTimeout bool
+	flushed       bool
+	config        Config
 }
 
-func newFlushBackend(queueSize int, shouldFail bool) *flushBackend {
-	return &flushBackend{flushed: false, config: newBackendConfig(queueSize), shouldFail: shouldFail}
+func newFlushBackend(queueSize int, shouldFail bool, shouldTimeout bool) *flushBackend {
+	return &flushBackend{
+		flushed:       false,
+		config:        newBackendConfig(queueSize),
+		shouldFail:    shouldFail,
+		shouldTimeout: shouldTimeout,
+	}
 }
 
 func (bl *flushBackend) ID() string {
@@ -598,9 +607,12 @@ func (bl *flushBackend) Config() Config {
 	return bl.config
 }
 
-func (bl *flushBackend) Flush() error {
+func (bl *flushBackend) Flush(ctx context.Context) error {
 	if bl.shouldFail {
 		return fmt.Errorf("flushBackend error")
+	}
+	if bl.shouldTimeout {
+		return fmt.Errorf("flushBackend timeout")
 	}
 	bl.flushed = true
 	return nil
@@ -609,11 +621,14 @@ func (bl *flushBackend) Flush() error {
 func TestFlushSuccess(t *testing.T) {
 	tl := newTestLogger()
 	tl.SetQueueRetryFrequency(time.Millisecond)
-	bb := newFlushBackend(1, false)
+	bb := newFlushBackend(1, false, false)
 	tl.RegisterBackend(context.Background(), bb)
 	t.Cleanup(func() { tl.UnregisterBackend(bb) })
 
-	tl.Shutdown(time.Millisecond)
+	tl.ShutdownWithConfig(ShutdownConfig{
+		QueueTimeout:   time.Millisecond,
+		BackendTimeout: time.Millisecond,
+	})
 
 	if !bb.flushed {
 		t.Errorf("bb.flushed = false, want: true")
@@ -623,11 +638,50 @@ func TestFlushSuccess(t *testing.T) {
 func TestFlushFailure(t *testing.T) {
 	tl := newTestLogger()
 	tl.SetQueueRetryFrequency(time.Millisecond)
-	bb := newFlushBackend( /* queueSize= */ 1 /* shouldFail= */, true)
+	bb := newFlushBackend( /* queueSize= */ 1 /* shouldFail= */, true, false)
 	tl.RegisterBackend(context.Background(), bb)
 	t.Cleanup(func() { tl.UnregisterBackend(bb) })
 
-	tl.Shutdown(time.Millisecond)
+	tl.ShutdownWithConfig(ShutdownConfig{
+		QueueTimeout:   time.Millisecond,
+		BackendTimeout: time.Millisecond,
+	})
+
+	if bb.flushed {
+		t.Errorf("bb.flushed = true, want: false")
+	}
+}
+
+func TestFlushWithTimeoutSuccess(t *testing.T) {
+	tl := newTestLogger()
+	tl.SetQueueRetryFrequency(time.Millisecond)
+	bb := newFlushBackend(1, false, false)
+	tl.RegisterBackend(context.Background(), bb)
+	t.Cleanup(func() { tl.UnregisterBackend(bb) })
+
+	shutdownConfig := ShutdownConfig{
+		QueueTimeout:   time.Millisecond,
+		BackendTimeout: time.Millisecond,
+	}
+	tl.ShutdownWithConfig(shutdownConfig)
+
+	if !bb.flushed {
+		t.Errorf("bb.flushed = false, want: true")
+	}
+}
+
+func TestFlushWithTimeoutFailure(t *testing.T) {
+	tl := newTestLogger()
+	tl.SetQueueRetryFrequency(time.Millisecond)
+	bb := newFlushBackend(1, false, true)
+	tl.RegisterBackend(context.Background(), bb)
+	t.Cleanup(func() { tl.UnregisterBackend(bb) })
+
+	shutdownConfig := ShutdownConfig{
+		QueueTimeout:   time.Millisecond,
+		BackendTimeout: time.Millisecond,
+	}
+	tl.ShutdownWithConfig(shutdownConfig)
 
 	if bb.flushed {
 		t.Errorf("bb.flushed = true, want: false")

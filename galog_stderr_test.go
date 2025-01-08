@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 )
 
 const (
@@ -110,7 +109,7 @@ func TestStderrSuccess(t *testing.T) {
 			}
 
 			tc.fc(tc.message)
-			Shutdown(time.Millisecond)
+			Shutdown()
 
 			if !strings.HasSuffix(logBuffer.String(), tc.want) {
 				t.Fatalf("Log() got: %s, want suffix: %s", logBuffer.String(), tc.want)

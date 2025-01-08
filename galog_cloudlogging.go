@@ -37,6 +37,9 @@ const (
 	// the backend object is created and the cloud logging client and logger are
 	// initialized immediately.
 	CloudLoggingInitModeActive
+	// CloudLoggingTimeout is the default timeout for the cloud logging backend
+	// flush operation.
+	CloudLoggingTimeout = 3 * time.Second
 )
 
 var (
@@ -234,9 +237,13 @@ func (cb *CloudBackend) Config() Config {
 }
 
 // Flush forces the cloud logging backend to flush its content.
-func (cb *CloudBackend) Flush() error {
+func (cb *CloudBackend) Flush(ctx context.Context) error {
 	if cb.logger == nil {
 		return errCloudLoggingNotInitialized
+	}
+
+	if err := cb.client.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to reach cloud logging, skipping flush: %v", err)
 	}
 
 	if err := cb.logger.Flush(); err != nil {

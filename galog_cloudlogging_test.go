@@ -92,7 +92,7 @@ func TestCloudLoggingLazyInit(t *testing.T) {
 		t.Fatalf("Log() = %v, want: %v", err, errCloudLoggingNotInitialized)
 	}
 
-	if err := be.Flush(); !errors.Is(err, errCloudLoggingNotInitialized) {
+	if err := be.Flush(context.Background()); !errors.Is(err, errCloudLoggingNotInitialized) {
 		t.Fatalf("Flush() = %v, want: %v", err, errCloudLoggingNotInitialized)
 	}
 }

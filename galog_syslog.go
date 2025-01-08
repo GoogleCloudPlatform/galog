@@ -15,6 +15,7 @@
 package galog
 
 import (
+	"context"
 	"sync"
 )
 
@@ -64,7 +65,7 @@ func (sb *SyslogBackend) ID() string {
 
 // Flush is a no-op implementation for syslog backend as we are opening
 // (and closing) syslogger for every log operation.
-func (sb *SyslogBackend) Flush() error {
+func (sb *SyslogBackend) Flush(context.Context) error {
 	return nil
 }
 

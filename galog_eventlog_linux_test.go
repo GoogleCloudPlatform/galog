@@ -19,7 +19,6 @@ package galog
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestNoopEventlogLinux(t *testing.T) {
@@ -41,5 +40,5 @@ func TestNoopEventlogLinux(t *testing.T) {
 		t.Errorf("metrics.success = %d, want 0", be.metrics.success)
 	}
 
-	Shutdown(time.Millisecond)
+	Shutdown()
 }
