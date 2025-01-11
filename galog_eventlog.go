@@ -14,6 +14,10 @@
 
 package galog
 
+import (
+	"context"
+)
+
 var (
 	// defaultEventlogQueueSize defines the default queue size of the windows
 	// event log backend implementation. In general writing to event log should
@@ -61,8 +65,8 @@ func (eb *EventlogBackend) Config() Config {
 	return eb.config
 }
 
-// Flush is a no-op implementation for event backend as we are opening eventlog
+// Shutdown is a no-op implementation for event backend as we are opening eventlog
 // for every log operation.
-func (eb *EventlogBackend) Flush() error {
+func (eb *EventlogBackend) Shutdown(context.Context) error {
 	return nil
 }

@@ -71,7 +71,7 @@ func (bl *bypassBackend) Config() Config {
 	return bl.config
 }
 
-func (bl *bypassBackend) Flush() error {
+func (bl *bypassBackend) Shutdown(context.Context) error {
 	return nil
 }
 
@@ -316,7 +316,7 @@ func (eb *enqueuedBackend) Config() Config {
 	return eb.config
 }
 
-func (eb *enqueuedBackend) Flush() error {
+func (eb *enqueuedBackend) Shutdown(context.Context) error {
 	return nil
 }
 
@@ -583,7 +583,11 @@ type flushBackend struct {
 }
 
 func newFlushBackend(queueSize int, shouldFail bool) *flushBackend {
-	return &flushBackend{flushed: false, config: newBackendConfig(queueSize), shouldFail: shouldFail}
+	return &flushBackend{
+		flushed:    false,
+		config:     newBackendConfig(queueSize),
+		shouldFail: shouldFail,
+	}
 }
 
 func (bl *flushBackend) ID() string {
@@ -598,7 +602,7 @@ func (bl *flushBackend) Config() Config {
 	return bl.config
 }
 
-func (bl *flushBackend) Flush() error {
+func (bl *flushBackend) Shutdown(context.Context) error {
 	if bl.shouldFail {
 		return fmt.Errorf("flushBackend error")
 	}

@@ -37,6 +37,9 @@ const (
 	// the backend object is created and the cloud logging client and logger are
 	// initialized immediately.
 	CloudLoggingInitModeActive
+	// DefaultCloudLoggingPingTimeout is the default timeout for pinging cloud
+	// logging.
+	DefaultCloudLoggingPingTimeout = time.Second
 )
 
 var (
@@ -77,8 +80,16 @@ type CloudOptions struct {
 	Instance string
 	// UserAgent is the logging user agent option.
 	UserAgent string
-	// flushCadence is how frequently we should push the log to the server.
+	// FlushCadence is how frequently we should push the log to the server.
 	FlushCadence time.Duration
+	// PingTimeout is the timeout for pinging Cloud Logging.
+	//
+	// This is required currently because the cloud logging flush operation hangs
+	// indefinitely when the server is unreachable due to having no external IP
+	// address or private Google access enabled. The timeout is used to attempt
+	// pinging the Cloud Logging server, and if it's not reachable, we skip the
+	// flush operation.
+	PingTimeout time.Duration
 	// WithoutAuthentication is whether to use authentication for cloud logging
 	// operations.
 	WithoutAuthentication bool
@@ -148,6 +159,11 @@ func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) erro
 
 	if opts.WithoutAuthentication {
 		clientOptions = append(clientOptions, option.WithoutAuthentication())
+	}
+
+	// Set the default flush timeout if not provided.
+	if opts.PingTimeout == 0 {
+		opts.PingTimeout = DefaultCloudLoggingPingTimeout
 	}
 
 	client, err := logging.NewClient(ctx, opts.Project, clientOptions...)
@@ -233,14 +249,24 @@ func (cb *CloudBackend) Config() Config {
 	return cb.config
 }
 
-// Flush forces the cloud logging backend to flush its content.
-func (cb *CloudBackend) Flush() error {
+// Shutdown forces the cloud logging backend to flush its content and closes the
+// logging client. This operation is skipped if Cloud Logging is unreachable.
+func (cb *CloudBackend) Shutdown(ctx context.Context) error {
 	if cb.logger == nil {
 		return errCloudLoggingNotInitialized
 	}
 
-	if err := cb.logger.Flush(); err != nil {
-		return fmt.Errorf("failed to flush cloud logging: %v", err)
+	pingTimeout, cancelFunc := context.WithTimeout(ctx, cb.opts.PingTimeout)
+	defer cancelFunc()
+
+	// Ensure we can reach Cloud Logging before attempting to flush.
+	if err := cb.client.Ping(pingTimeout); err != nil {
+		return fmt.Errorf("failed to reach cloud logging, skipping flush: %v", err)
+	}
+
+	// Closing the client will flush the logs.
+	if err := cb.client.Close(); err != nil {
+		return fmt.Errorf("failed to close cloud logging client: %v", err)
 	}
 	return nil
 }

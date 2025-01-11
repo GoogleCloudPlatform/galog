@@ -64,8 +64,10 @@ type Backend interface {
 	Log(entry *LogEntry) error
 	// Config returns the backend configuration interface implementation.
 	Config() Config
-	// Flush flushes the backend's backing log storage.
-	Flush() error
+	// Shutdown performs shutdown operations for the backend service.
+	// The operations should include flushing the backend's backing log storage
+	// and closing the backend's logging service if applicable.
+	Shutdown(ctx context.Context) error
 }
 
 // LogEntry describes a log record.
@@ -600,7 +602,7 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 			break
 		}
 		lg.flushEnqueuedEntries(ctx, queue)
-		queue.backend.Flush()
+		queue.backend.Shutdown(ctx)
 	}
 }
 

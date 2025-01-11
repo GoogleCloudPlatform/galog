@@ -98,9 +98,9 @@ func (sb *SerialBackend) ID() string {
 	return sb.backendID
 }
 
-// Flush is a no-op implementation for serial backend as we are opening the file
+// Shutdown is a no-op implementation for serial backend as we are opening the file
 // for every log operation.
-func (sb *SerialBackend) Flush() error {
+func (sb *SerialBackend) Shutdown(context.Context) error {
 	return nil
 }
 

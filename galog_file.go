@@ -15,6 +15,7 @@
 package galog
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
@@ -92,8 +93,8 @@ func (fb *FileBackend) Config() Config {
 	return fb.config
 }
 
-// Flush is a no-op implementation for file backend as we are opening the file
+// Shutdown is a no-op implementation for file backend as we are opening the file
 // for every log operation.
-func (fb *FileBackend) Flush() error {
+func (fb *FileBackend) Shutdown(context.Context) error {
 	return nil
 }
