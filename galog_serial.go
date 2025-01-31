@@ -52,7 +52,7 @@ func NewSerialBackend(ctx context.Context, opts *SerialOptions) *SerialBackend {
 	res := &SerialBackend{
 		backendID: "log-backend,serial",
 		opts:      opts,
-		config:    newBackendConfig(defaultStderrQueueSize),
+		config:    newBackendConfig(defaultSerialQueueSize),
 	}
 
 	res.config.SetFormat(ErrorLevel,

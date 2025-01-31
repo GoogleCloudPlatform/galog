@@ -40,6 +40,17 @@ const (
 	// DefaultCloudLoggingPingTimeout is the default timeout for pinging cloud
 	// logging.
 	DefaultCloudLoggingPingTimeout = time.Second
+	// DefaultClientErrorInterval is the default interval for logging the client
+	// errors.
+	DefaultClientErrorInterval = time.Minute * 20
+	// DefaultClientErrorLoggingDisabled is whether to enable the client error
+	// logging by default.
+	DefaultClientErrorLoggingDisabled = false
+	// defaultCloudLoggingQueueSize is the default queue size of the cloud logging
+	// backend implementation. In general writing to cloud logging should not
+	// require buffering as cloud logging is async and logging library takes care
+	// of flushing.
+	defaultCloudLoggingQueueSize = 100
 )
 
 var (
@@ -64,6 +75,10 @@ type CloudBackend struct {
 	config *backendConfig
 	// opts is the cloud logging options.
 	opts *CloudOptions
+	// periodicLogger is the periodic logger used to capture the client errors.
+	periodicLogger *periodicLogger
+	// disableClientErrorLogging is whether to disable the client error logging.
+	disableClientErrorLogging bool
 }
 
 // CloudOptions defines the cloud logging behavior and setup options.
@@ -82,6 +97,17 @@ type CloudOptions struct {
 	UserAgent string
 	// FlushCadence is how frequently we should push the log to the server.
 	FlushCadence time.Duration
+	// ClientErrorInterval is how frequently we should log the client errors. This
+	// defaults to [DefaultClientErrorInterval].
+	ClientErrorInterval time.Duration
+	// DisableClientErrorLogging is whether to disable the client error logging.
+	// If enabled, any errors from the cloud logging client will be logged
+	// periodically. Period is controlled by [ClientErrorInterval] option.
+	// Periodical logging is used to prevent spamming the error logs in case of a
+	// persistent error. By default this is enabled and controlled by
+	// [DefaultClientErrorLoggingDisabled]. This periodic logger would attempt to
+	// log at [WARN] level to every other configured backend (file, serial, etc).
+	DisableClientErrorLogging bool
 	// PingTimeout is the timeout for pinging Cloud Logging.
 	//
 	// This is required currently because the cloud logging flush operation hangs
@@ -166,12 +192,29 @@ func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) erro
 		opts.PingTimeout = DefaultCloudLoggingPingTimeout
 	}
 
+	cb.disableClientErrorLogging = opts.DisableClientErrorLogging
+
+	errTimeout := opts.ClientErrorInterval
+	if errTimeout == 0 {
+		errTimeout = DefaultClientErrorInterval
+	}
+
+	cb.periodicLogger = &periodicLogger{
+		interval: errTimeout,
+	}
+
 	client, err := logging.NewClient(ctx, opts.Project, clientOptions...)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cloud logging client: %+v", err)
 	}
 
-	client.OnError = func(error) { return }
+	client.OnError = func(err error) {
+		if opts.DisableClientErrorLogging {
+			return
+		}
+		cb.periodicLogger.log(err)
+	}
+
 	var loggerOptions []logging.LoggerOption
 
 	if opts.Instance != "" {
@@ -269,4 +312,29 @@ func (cb *CloudBackend) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("failed to close cloud logging client: %v", err)
 	}
 	return nil
+}
+
+// periodicLogger is a helper struct used to log the client errors periodically.
+// Its to prevent spamming the logs with client errors. If there is a persistent
+// error, the client will call the error handler too frequently.
+type periodicLogger struct {
+	// interval is the interval between logging the client errors.
+	interval time.Duration
+	// lastLog is the last time the client error was logged.
+	lastLog time.Time
+	// firstRunPassed is whether this is the first time the error handler was
+	// called.
+	firstRunPassed bool
+}
+
+// log logs the error if the interval has passed since the last log.
+// Returns true if the error was logged, this is only used for testing.
+func (pl *periodicLogger) log(err error) bool {
+	if !pl.firstRunPassed || time.Since(pl.lastLog) >= pl.interval {
+		pl.firstRunPassed = true
+		pl.lastLog = time.Now()
+		Warnf("Cloud Logging Client Error: %v", err)
+		return true
+	}
+	return false
 }
