@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"time"
 
 	"cloud.google.com/go/logging"
@@ -52,10 +51,12 @@ const (
 	// require buffering as cloud logging is async and logging library takes care
 	// of flushing.
 	defaultCloudLoggingQueueSize = 100
-	// The following are labels used for Managed Instance Groups.
-	migNameLabel   = `compute.googleapis.com/instance_group_manager/name`
-	migZoneLabel   = `compute.googleapis.com/instance_group_manager/zone`
-	migRegionLabel = `compute.googleapis.com/instance_group_manager/region`
+	// MIGNameLabel is the MIG name label.
+	MIGNameLabel = `compute.googleapis.com/instance_group_manager/name`
+	// MIGZoneLabel is the MIG zone label.
+	MIGZoneLabel = `compute.googleapis.com/instance_group_manager/zone`
+	// MIGRegionLabel is the MIG region label.
+	MIGRegionLabel = `compute.googleapis.com/instance_group_manager/region`
 )
 
 var (
@@ -124,8 +125,8 @@ type CloudOptions struct {
 	// WithoutAuthentication is whether to use authentication for cloud logging
 	// operations.
 	WithoutAuthentication bool
-	// MIG is the Managed Instance Group.
-	MIG string
+	// ExtraLabels are extra labels to be added to the cloud logging entry.
+	ExtraLabels map[string]string
 }
 
 // CloudEntryPayload contains the data to be sent to cloud logging as the
@@ -177,33 +178,6 @@ func NewCloudBackend(ctx context.Context, mode CloudLoggingInitMode, opts *Cloud
 	return res, nil
 }
 
-// parseMIGLabels parses the MIG string gotten from MDS and returns the labels
-// to be used for cloud logging.
-func parseMIGLabels(mig string) map[string]string {
-	labels := map[string]string{}
-	if mig == "" {
-		return labels
-	}
-
-	// Make sure the `created-by` key is set by the MIG.
-	MIGRe := regexp.MustCompile(`^projects/[^/]+/(zones|regions)/([^/]+)/instanceGroupManagers/([^/]+)$`)
-	matches := MIGRe.FindStringSubmatch(mig)
-	if matches == nil {
-		return labels
-	}
-
-	var locationLabel string
-	switch matches[1] {
-	case "zones":
-		locationLabel = migZoneLabel
-	case "regions":
-		locationLabel = migRegionLabel
-	}
-	labels[migNameLabel] = matches[3]
-	labels[locationLabel] = matches[2]
-	return labels
-}
-
 // InitClient initializes the cloud logging client and logger. If the backend
 // was initialized in "active" mode this function is no-op.
 func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) error {
@@ -249,21 +223,17 @@ func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) erro
 		cb.periodicLogger.log(err)
 	}
 
+	labels := make(map[string]string)
 	var loggerOptions []logging.LoggerOption
-
 	if opts.Instance != "" {
-		labels := map[string]string{
-			"instance_name": opts.Instance,
-		}
-
-		// Add MIG labels if provided.
-		extraLabels := parseMIGLabels(opts.MIG)
-		for k, v := range extraLabels {
-			labels[k] = v
-		}
-		loggerOptions = append(loggerOptions, logging.CommonLabels(labels))
+		labels["instance_name"] = opts.Instance
 	}
 
+	// Add extra labels.
+	for k, v := range opts.ExtraLabels {
+		labels[k] = v
+	}
+	loggerOptions = append(loggerOptions, logging.CommonLabels(labels))
 	loggerOptions = append(loggerOptions, logging.DelayThreshold(opts.FlushCadence))
 	logger := client.Logger(opts.Ident, loggerOptions...)
 
