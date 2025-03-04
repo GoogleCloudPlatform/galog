@@ -4,7 +4,6 @@ go 1.23
 
 require (
 	cloud.google.com/go/logging v1.13.0
-	github.com/google/go-cmp v0.7.0
 	go.bug.st/serial v1.6.2
 	golang.org/x/sys v0.30.0
 	google.golang.org/api v0.223.0

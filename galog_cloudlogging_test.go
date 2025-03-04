@@ -19,57 +19,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
 )
-
-func TestParseMIG(t *testing.T) {
-	tests := []struct {
-		name string
-		mig  string
-		want map[string]string
-	}{
-		{
-			// `created-by` attribute was not set.
-			name: "empty_mig",
-			mig:  "",
-			want: map[string]string{},
-		},
-		{
-			// MIG is zonal.
-			name: "valid_mig-zone",
-			mig:  "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-mig",
-			want: map[string]string{
-				migNameLabel: "test-mig",
-				migZoneLabel: "us-central1-a",
-			},
-		},
-		{
-			// MIG is regional.
-			name: "valid_mig-region",
-			mig:  "projects/test-project/regions/us-central1/instanceGroupManagers/test-mig",
-			want: map[string]string{
-				migNameLabel:   "test-mig",
-				migRegionLabel: "us-central1",
-			},
-		},
-		{
-			// `created-by` was not set by MIG.
-			name: "invalid_mig",
-			mig:  "invalid-mig",
-			want: map[string]string{},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := parseMIGLabels(tc.mig)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("parseMIG(%q) returned an unexpected diff (-want +got): %v", tc.mig, diff)
-			}
-		})
-	}
-}
 
 func TestCloudLogging(t *testing.T) {
 	opts := CloudOptions{
@@ -79,6 +29,7 @@ func TestCloudLogging(t *testing.T) {
 		Instance:                  "test-instance",
 		UserAgent:                 "galog Agent",
 		DisableClientErrorLogging: true,
+		ExtraLabels:               map[string]string{"foo": "bar"},
 	}
 
 	ctx := context.Background()
