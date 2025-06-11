@@ -143,8 +143,16 @@ var (
 	defaultLogger *logger
 
 	// defaultRetryFrequency is the default frequency for the log queue timed
-	// processing retry.
-	defaultRetryFrequency = time.Millisecond * 10
+	// processing retry. If the frequency is too low, then we run the risk of
+	// filling up the queue when log volumes are high. If the frequency is too
+	// high, then we burn CPU cycles unnecessarily. We choose 200ms as a tradeoff
+	// which should minimize CPU usage while ensuring that log entries are
+	// retried frequently enough.
+	//
+	// Note that currently we only enqueue log entries if we fail to write them
+	// immediately. In the normal case, logs are flushed immediately to the
+	// backend without being queued.
+	defaultRetryFrequency = time.Millisecond * 200
 
 	// FatalLevel is the log level definition for Fatal severity.
 	FatalLevel = Level{0, "FATAL"}
