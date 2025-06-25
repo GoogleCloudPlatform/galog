@@ -96,9 +96,9 @@ type BackendQueue struct {
 	// routine accessing entries, one processing the entries being enqueued with a
 	// channel and another handling the periodic processing of enqueued entries.
 	entriesMutex sync.Mutex
-	// cancel is the channel used to cancel the queue handing go routine
-	// of a given backend.
-	cancel chan bool
+	// cancel is a function which can be used to cancel the queue handing go
+	// routine of a given backend.
+	cancel func()
 	// bus is the channel used to enqueue a new log record/entry.
 	bus chan *LogEntry
 	// ticker is a timer used to periodically process pending queue.
@@ -574,7 +574,7 @@ func (lg *logger) UnregisterBackend(backend Backend) {
 	if queue, found := lg.queues[backend.ID()]; found {
 		delete(lg.queues, backend.ID())
 		queue.ticker.Stop()
-		queue.cancel <- true
+		queue.cancel()
 	}
 }
 
@@ -616,8 +616,9 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 
 // RegisterBackend inserts/registers a backend implementation.
 func (lg *logger) RegisterBackend(ctx context.Context, backend Backend) {
+	ctx, cancel := context.WithCancel(ctx)
 	backendQueue := &BackendQueue{
-		cancel:          make(chan bool),
+		cancel:          cancel,
 		bus:             make(chan *LogEntry),
 		tickerFrequency: lg.retryFrequency,
 		ticker:          time.NewTicker(lg.retryFrequency),
@@ -697,9 +698,6 @@ func (lg *logger) runBackend(ctx context.Context, backend Backend, bq *BackendQu
 			select {
 			// Context cancelation handling.
 			case <-ctx.Done():
-				return
-			// Backend unregistering handling.
-			case <-bq.cancel:
 				return
 			// Entry enqueueing handling.
 			case entry := <-bq.bus:

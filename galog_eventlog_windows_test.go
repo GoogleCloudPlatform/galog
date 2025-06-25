@@ -59,11 +59,16 @@ func TestEventlog(t *testing.T) {
 			RegisterBackend(ctx, be)
 
 			test.fn("foobar")
-			Shutdown(time.Millisecond * 10)
-
-			if be.metrics.success != 1 {
-				t.Fatalf("success got %d, want 1", be.metrics.success)
+			// The event log backend takes a while to set up, so keep waiting until
+			// it's successful.
+			start := time.Now()
+			for be.metrics.success != 1 {
+				if time.Since(start) >= 5*time.Second {
+					t.Fatal("Timed out waiting for event log")
+				}
+				time.Sleep(10 * time.Millisecond)
 			}
+			Shutdown(time.Millisecond * 10)
 		})
 	}
 }

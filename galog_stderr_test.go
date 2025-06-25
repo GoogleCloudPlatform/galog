@@ -16,7 +16,6 @@ package galog
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -80,41 +79,39 @@ func TestStderrSuccess(t *testing.T) {
 	tests := []struct {
 		desc    string
 		message string
-		fc      func(args ...any)
+		level   Level
 		want    string
 	}{
 		{
 			desc:    "error_level",
 			message: "foo bar",
-			fc:      Error,
+			level:   ErrorLevel,
 			want:    "[ERROR]: foo bar\n",
 		},
 		{
 			desc:    "warning_level",
 			message: "foo bar",
-			fc:      Warn,
+			level:   WarningLevel,
 			want:    "[WARNING]: foo bar\n",
 		},
 	}
-
-	ctx := context.Background()
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			logBuffer := bytes.NewBuffer(nil)
 			be := NewStderrBackend(logBuffer)
-			RegisterBackend(ctx, be)
-
 			if be.Config() == nil {
 				t.Fatal("NewStderrBackend() failed: Config() returned nil")
 			}
 
-			tc.fc(tc.message)
-			Shutdown(time.Millisecond)
-
+			entry := newEntry(tc.level, "", tc.message)
+			if err := be.Log(entry); err != nil {
+				t.Fatalf("Log() failed: %v", err)
+			}
 			if !strings.HasSuffix(logBuffer.String(), tc.want) {
 				t.Fatalf("Log() got: %s, want suffix: %s", logBuffer.String(), tc.want)
 			}
+			Shutdown(time.Millisecond)
 		})
 	}
 }
