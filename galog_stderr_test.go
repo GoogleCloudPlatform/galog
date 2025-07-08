@@ -89,10 +89,22 @@ func TestStderrSuccess(t *testing.T) {
 			want:    "[ERROR]: foo bar\n",
 		},
 		{
-			desc:    "warning_level",
+			desc:    "warning_level_skip",
 			message: "foo bar",
 			level:   WarningLevel,
-			want:    "[WARNING]: foo bar\n",
+			want:    "",
+		},
+		{
+			desc:    "info_level_skip",
+			message: "foo bar",
+			level:   InfoLevel,
+			want:    "",
+		},
+		{
+			desc:    "debug_level_skip",
+			message: "foo bar",
+			level:   DebugLevel,
+			want:    "",
 		},
 	}
 
@@ -108,6 +120,11 @@ func TestStderrSuccess(t *testing.T) {
 			if err := be.Log(entry); err != nil {
 				t.Fatalf("Log() failed: %v", err)
 			}
+
+			if tc.want == "" && logBuffer.Len() != 0 {
+				t.Fatalf("Log() got: %s, want empty", logBuffer.String())
+			}
+
 			if !strings.HasSuffix(logBuffer.String(), tc.want) {
 				t.Fatalf("Log() got: %s, want suffix: %s", logBuffer.String(), tc.want)
 			}

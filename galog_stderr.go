@@ -64,6 +64,10 @@ func (wb *StderrBackend) ID() string {
 
 // Log prints the log entry to stderr.
 func (wb *StderrBackend) Log(entry *LogEntry) error {
+	if entry.Level != ErrorLevel {
+		return nil
+	}
+
 	format := wb.config.Format(entry.Level)
 
 	message, err := entry.Format(format + "\n")
