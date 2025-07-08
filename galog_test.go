@@ -533,14 +533,6 @@ func TestSetQueueRetryFrequency(t *testing.T) {
 	if val := QueueRetryFrequency(); val != retryFrequency {
 		t.Errorf("QueueRetryFreuency() = %s, want: %s", QueueRetryFrequency(), retryFrequency)
 	}
-
-	for i, curr := range defaultLogger.queues {
-		t.Run(fmt.Sprintf("set-queue-retry-freq-%s", i), func(t *testing.T) {
-			if curr.tickerFrequency != retryFrequency {
-				t.Errorf("curr.tickerFrequency = %s, want: %s", curr.tickerFrequency, retryFrequency)
-			}
-		})
-	}
 }
 
 func TestBackendConfigFormat(t *testing.T) {

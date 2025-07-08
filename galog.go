@@ -96,15 +96,14 @@ type BackendQueue struct {
 	// routine accessing entries, one processing the entries being enqueued with a
 	// channel and another handling the periodic processing of enqueued entries.
 	entriesMutex sync.Mutex
+	// entriesCond is signaled when there are potentially new entries in the
+	// queue or when the context is cancelled.
+	entriesCond *sync.Cond
 	// cancel is a function which can be used to cancel the queue handing go
 	// routine of a given backend.
 	cancel func()
 	// bus is the channel used to enqueue a new log record/entry.
 	bus chan *LogEntry
-	// ticker is a timer used to periodically process pending queue.
-	ticker *time.Ticker
-	// tickerFrequency is the frequency of the ticker.
-	tickerFrequency time.Duration
 	// backend points to the actual backend object.
 	backend Backend
 }
@@ -122,7 +121,7 @@ type logger struct {
 	// queues as well as changing configurations such as SetQueueRetryFrequency().
 	queuesMutex sync.Mutex
 
-	// retryFrequency is the frequency for the log queue timed processing retry.
+	// retryFrequency is the interval at which failed log flushes will be retried.
 	retryFrequency time.Duration
 
 	// verbosity is the verbosity level set for the logger.
@@ -551,15 +550,6 @@ func (lg *logger) SetPrefix(prefix string) {
 // processed.
 func (lg *logger) SetQueueRetryFrequency(frequency time.Duration) {
 	lg.retryFrequency = frequency
-
-	lg.queuesMutex.Lock()
-	for _, backend := range lg.queues {
-		if backend.tickerFrequency != frequency {
-			backend.tickerFrequency = frequency
-			backend.ticker.Reset(frequency)
-		}
-	}
-	lg.queuesMutex.Unlock()
 }
 
 // QueueRetryFrequency returns the currently set log queue processing frequency.
@@ -573,7 +563,6 @@ func (lg *logger) UnregisterBackend(backend Backend) {
 	defer lg.queuesMutex.Unlock()
 	if queue, found := lg.queues[backend.ID()]; found {
 		delete(lg.queues, backend.ID())
-		queue.ticker.Stop()
 		queue.cancel()
 	}
 }
@@ -609,7 +598,9 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 		if ctx.Err() != nil {
 			break
 		}
-		lg.flushEnqueuedEntries(ctx, queue)
+		queue.entriesMutex.Lock()
+		lg.flushEnqueuedEntriesLocked(ctx, queue)
+		queue.entriesMutex.Unlock()
 		queue.backend.Shutdown(ctx)
 	}
 }
@@ -618,12 +609,11 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 func (lg *logger) RegisterBackend(ctx context.Context, backend Backend) {
 	ctx, cancel := context.WithCancel(ctx)
 	backendQueue := &BackendQueue{
-		cancel:          cancel,
-		bus:             make(chan *LogEntry),
-		tickerFrequency: lg.retryFrequency,
-		ticker:          time.NewTicker(lg.retryFrequency),
-		backend:         backend,
+		cancel:  cancel,
+		bus:     make(chan *LogEntry),
+		backend: backend,
 	}
+	backendQueue.entriesCond = sync.NewCond(&backendQueue.entriesMutex)
 
 	lg.queuesMutex.Lock()
 	lg.queues[backend.ID()] = backendQueue
@@ -660,12 +650,16 @@ func (lg *logger) runBackend(ctx context.Context, backend Backend, bq *BackendQu
 			return false
 		}
 
+		shouldSignal := len(bq.entries) == 0
 		bq.entries = append(bq.entries, item)
 		queueSize := config.QueueSize()
 		// If we've reached the queue limit we remove the oldest entry from the
 		// queue.
 		if queueSize > 0 && len(bq.entries) > queueSize {
 			bq.entries = bq.entries[1:]
+		}
+		if shouldSignal {
+			bq.entriesCond.Signal()
 		}
 
 		return true
@@ -677,15 +671,23 @@ func (lg *logger) runBackend(ctx context.Context, backend Backend, bq *BackendQu
 	// Runs the the periodical processing of the queue.
 	go func() {
 		defer wg.Done()
+		bq.entriesMutex.Lock()
+		defer bq.entriesMutex.Unlock()
 		for {
-			select {
-			// Context cancelation handling.
-			case <-ctx.Done():
-				bq.ticker.Stop()
+			if ctx.Err() != nil {
 				return
-			// Periodically queue processing.
-			case <-bq.ticker.C:
-				lg.flushEnqueuedEntries(ctx, bq)
+			}
+			if len(bq.entries) == 0 {
+				bq.entriesCond.Wait()
+				continue
+			}
+			if err := lg.flushEnqueuedEntriesLocked(ctx, bq); err != nil {
+				bq.entriesMutex.Unlock()
+				select {
+				case <-ctx.Done():
+				case <-time.After(lg.retryFrequency):
+				}
+				bq.entriesMutex.Lock()
 			}
 		}
 	}()
@@ -694,6 +696,7 @@ func (lg *logger) runBackend(ctx context.Context, backend Backend, bq *BackendQu
 	// Runs the entry enqueueing and backend unregistration.
 	go func() {
 		defer wg.Done()
+		defer bq.entriesCond.Signal()
 		for {
 			select {
 			// Context cancelation handling.
@@ -714,26 +717,28 @@ func (lg *logger) runBackend(ctx context.Context, backend Backend, bq *BackendQu
 	wg.Wait()
 }
 
-// flushEnqueuedEntries try to write any pending entries from the queue. It
-// will attempt to write until the context is canceled otherwise it runs until
-// all the queue is processed.
-func (lg *logger) flushEnqueuedEntries(ctx context.Context, bq *BackendQueue) {
+// flushEnqueuedEntriesLocked try to write any pending entries from the queue.
+// It will attempt to write until the context is canceled otherwise it runs
+// until all the queue is processed.
+//
+// The entriesMutex must be locked by the caller while this method runs.
+func (lg *logger) flushEnqueuedEntriesLocked(ctx context.Context, bq *BackendQueue) error {
 	var success int
-	bq.entriesMutex.Lock()
-	defer bq.entriesMutex.Unlock()
-	for _, curr := range bq.entries {
-		if ctx.Err() != nil {
-			break
+	defer func() {
+		if success > 0 {
+			bq.entries = bq.entries[success:]
 		}
-
+	}()
+	for _, curr := range bq.entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := bq.backend.Log(curr); err != nil {
-			break
+			return err
 		}
 		success++
 	}
-	if len(bq.entries) > 0 && success > 0 {
-		bq.entries = bq.entries[success:]
-	}
+	return nil
 }
 
 // log is the bridging point between the logging functions and the
