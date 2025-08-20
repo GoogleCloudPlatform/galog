@@ -121,6 +121,9 @@ type CloudOptions struct {
 	WithoutAuthentication bool
 	// ExtraLabels are extra labels to be added to the cloud logging entry.
 	ExtraLabels map[string]string
+	// Endpoint is the cloud logging endpoint to use. If empty, the default
+	// endpoint will be used.
+	Endpoint string
 }
 
 // CloudEntryPayload contains the data to be sent to cloud logging as the
@@ -187,6 +190,10 @@ func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) erro
 
 	if opts.WithoutAuthentication {
 		clientOptions = append(clientOptions, option.WithoutAuthentication())
+	}
+
+	if opts.Endpoint != "" {
+		clientOptions = append(clientOptions, option.WithEndpoint(opts.Endpoint))
 	}
 
 	// Set the default flush timeout if not provided.
