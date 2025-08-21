@@ -124,6 +124,9 @@ type CloudOptions struct {
 	// Endpoint is the cloud logging endpoint to use. If empty, the default
 	// endpoint will be used.
 	Endpoint string
+	// UniverseDomain is the universe domain to use for cloud logging. If empty,
+	// the default universe domain will be used.
+	UniverseDomain string
 }
 
 // CloudEntryPayload contains the data to be sent to cloud logging as the
@@ -194,6 +197,10 @@ func (cb *CloudBackend) InitClient(ctx context.Context, opts *CloudOptions) erro
 
 	if opts.Endpoint != "" {
 		clientOptions = append(clientOptions, option.WithEndpoint(opts.Endpoint))
+	}
+
+	if opts.UniverseDomain != "" {
+		clientOptions = append(clientOptions, option.WithUniverseDomain(opts.UniverseDomain))
 	}
 
 	// Set the default flush timeout if not provided.
