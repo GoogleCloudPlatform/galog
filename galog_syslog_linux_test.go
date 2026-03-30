@@ -77,12 +77,18 @@ func TestSyslog(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 
-			if be.metrics.errors != 0 {
-				t.Errorf("got errors %d, want 0. Errors: \n%s\n", be.metrics.errors, strings.Join(be.metrics.errorMsgs, "\n"))
+			be.metrics.mu.Lock()
+			errors := be.metrics.errors
+			errorMsgs := be.metrics.errorMsgs
+			successMetric := be.metrics.success
+			be.metrics.mu.Unlock()
+
+			if errors != 0 {
+				t.Errorf("got errors %d, want 0. Errors: \n%s\n", errors, strings.Join(errorMsgs, "\n"))
 			}
 
 			if !success {
-				t.Errorf("got success %d, want %d", be.metrics.success, writtenEntries+1)
+				t.Errorf("got success %d, want %d", successMetric, writtenEntries+1)
 			}
 		})
 	}
