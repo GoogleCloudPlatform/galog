@@ -42,7 +42,8 @@ func (ew errorWriter) Write(data []byte) (int, error) {
 
 func TestStderrWriteFailure(t *testing.T) {
 	logBuffer := &errorWriter{failureType: writeFailure}
-	be := NewStderrBackend(logBuffer)
+	be := NewStderrBackend()
+	be.writer = logBuffer
 
 	entry := newEntry(ErrorLevel, "", "foobar")
 	err := be.Log(entry)
@@ -53,7 +54,8 @@ func TestStderrWriteFailure(t *testing.T) {
 
 func TestStderrWriteLenFailure(t *testing.T) {
 	logBuffer := &errorWriter{failureType: writeLenFailure}
-	be := NewStderrBackend(logBuffer)
+	be := NewStderrBackend()
+	be.writer = logBuffer
 
 	entry := newEntry(ErrorLevel, "", "foobar")
 	err := be.Log(entry)
@@ -64,7 +66,8 @@ func TestStderrWriteLenFailure(t *testing.T) {
 
 func TestStderrInvalidFormat(t *testing.T) {
 	logBuffer := bytes.NewBuffer(nil)
-	be := NewStderrBackend(logBuffer)
+	be := NewStderrBackend()
+	be.writer = logBuffer
 
 	be.Config().SetFormat(ErrorLevel, "{{.Foobar}}")
 
@@ -89,6 +92,12 @@ func TestStderrSuccess(t *testing.T) {
 			want:    "[ERROR]: foo bar\n",
 		},
 		{
+			desc:    "fatal_level",
+			message: "foo bar",
+			level:   FatalLevel,
+			want:    "[FATAL]: foo bar\n",
+		},
+		{
 			desc:    "warning_level_skip",
 			message: "foo bar",
 			level:   WarningLevel,
@@ -111,7 +120,8 @@ func TestStderrSuccess(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			logBuffer := bytes.NewBuffer(nil)
-			be := NewStderrBackend(logBuffer)
+			be := NewStderrBackend()
+			be.writer = logBuffer
 			if be.Config() == nil {
 				t.Fatal("NewStderrBackend() failed: Config() returned nil")
 			}

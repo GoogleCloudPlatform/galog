@@ -1,4 +1,4 @@
-//  Copyright 2024 Google LLC
+//  Copyright 2026 Google LLC
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -15,40 +15,37 @@
 package galog
 
 import (
-	"io"
 	"os"
 )
 
 const (
-	// defaultStderrQueueSize defines the default queue size of the stderr
-	// backend implementation. In general writing to stderr doesn't require
+	// defaultStdoutQueueSize defines the default queue size of the stdout
+	// backend implementation. In general writing to stdout doesn't require
 	// caching or queueing, we set a limit to avoid the queue to grow
 	// indefinitely in case of any disastrous behavior of the OS - as 0 means
 	// "grow indefinitely".
-	defaultStderrQueueSize = 10
+	defaultStdoutQueueSize = 10
 )
 
-// StderrBackend is a simple backend implementation for logging to stderr.
-type StderrBackend struct {
+// StdoutBackend is a simple backend implementation for logging to stdout.
+type StdoutBackend struct {
 	*writerBackend
 }
 
-// NewStderrBackend returns a Backend implementation that will log out to
-// the process' stderr. Writers is deprecated and will be removed in the future.
-// It is kept for compatibility with users who may have used it in the past.
-// It always writes to os.Stderr.
-func NewStderrBackend(writers ...io.Writer) *StderrBackend {
-	res := &StderrBackend{
+// NewStdoutBackend returns a Backend implementation that will log out to the
+// process' stdout.
+func NewStdoutBackend() *StdoutBackend {
+	res := &StdoutBackend{
 		writerBackend: &writerBackend{
-			backendID: "log-backend,stderr",
-			config:    newBackendConfig(defaultStderrQueueSize),
-			writer:    os.Stderr,
-			skip:      func(lvl Level) bool { return lvl != ErrorLevel && lvl != FatalLevel },
-			sync:      os.Stderr.Sync,
+			backendID: "log-backend,stdout",
+			config:    newBackendConfig(defaultStdoutQueueSize),
+			writer:    os.Stdout,
+			skip:      func(lvl Level) bool { return lvl == ErrorLevel || lvl == FatalLevel },
+			sync:      os.Stdout.Sync,
 		},
 	}
 
-	res.config.SetFormat(ErrorLevel,
+	res.config.SetFormat(InfoLevel,
 		`{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} {{if .Prefix}} {{.Prefix}}: {{end}}[{{.Level}}]: {{.Message}}`)
 	res.config.SetFormat(DebugLevel,
 		`{{.When.Format "2006-01-02T15:04:05.0000Z07:00"}} {{if .Prefix}} {{.Prefix}}: {{end}}[{{.Level}}]: ({{.File}}:{{.Line}}) {{.Message}}`)
