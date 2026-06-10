@@ -15,7 +15,6 @@
 package galog
 
 import (
-	"io"
 	"os"
 )
 
@@ -34,10 +33,8 @@ type StderrBackend struct {
 }
 
 // NewStderrBackend returns a Backend implementation that will log out to
-// the process' stderr. Writers is deprecated and will be removed in the future.
-// It is kept for compatibility with users who may have used it in the past.
-// It always writes to os.Stderr.
-func NewStderrBackend(writers ...io.Writer) *StderrBackend {
+// the process' stderr. It always writes to os.Stderr.
+func NewStderrBackend() *StderrBackend {
 	res := &StderrBackend{
 		writerBackend: &writerBackend{
 			backendID: "log-backend,stderr",
