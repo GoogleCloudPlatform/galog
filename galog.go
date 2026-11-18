@@ -593,15 +593,45 @@ func (lg *logger) Shutdown(timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Flush any pending writes.
+	var wg sync.WaitGroup
 	for _, queue := range backends {
-		if ctx.Err() != nil {
-			break
-		}
-		queue.entriesMutex.Lock()
-		lg.flushEnqueuedEntriesLocked(ctx, queue)
-		queue.entriesMutex.Unlock()
-		queue.backend.Shutdown(ctx)
+		wg.Add(1)
+		go func(bq *BackendQueue) {
+			defer wg.Done()
+
+			// Attempt to acquire the lock to flush remaining entries.
+			// We poll TryLock with a timeout to prevent deadlocking if the
+			// background flusher is stuck on a blocked network write.
+			const pollInterval = 10 * time.Millisecond
+			var locked bool
+			for {
+				if bq.entriesMutex.TryLock() {
+					locked = true
+					break
+				}
+				if ctx.Err() != nil {
+					break
+				}
+				time.Sleep(pollInterval)
+			}
+
+			if locked {
+				lg.flushEnqueuedEntriesLocked(ctx, bq)
+				bq.entriesMutex.Unlock()
+			}
+			bq.backend.Shutdown(ctx)
+		}(queue)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
